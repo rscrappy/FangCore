@@ -224,6 +224,8 @@ class FangCoreTerminal: #A Class for creating FangCore Terminal Servers
 	0|cte
 	0|cre
 	0|cls
+	0|rfi
+	0|sfi
 	'''
 
 	def __init__(self, IP, Port, listener_max=10): #Initialize Libraries, define IP, Port, and set up request buffer
@@ -272,18 +274,21 @@ class _Fang_Terminal_Server_Client:
 		self.send(str(len(string)) + "|inp" + str(string))
 		try:
 			if timeout:
-				number = ""
-				while 1:
-					rec = self.recv(1, timeout)
-					if rec == "|":
-						break
+				try:
+					number = ""
+					while 1:
+						rec = self.recv(1, timeout)
+						if rec == "|":
+							break
+						else:
+							number += rec
+					if self.recv(3) == "ret":
+						return self.recv(int(number))
 					else:
-						number += rec
-				if self.recv(3) == "ret":
-					return self.recv(int(number))
-				else:
-					self.recv(number)
-					return ""
+						self.recv(number)
+						return ""
+				except socket.timeout:
+					return False
 			else:
 				number = ""
 				while 1:
