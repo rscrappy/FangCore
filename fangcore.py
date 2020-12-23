@@ -4,6 +4,22 @@ FangCore is a python library built for creating highly customizable Operating sy
 It has incredibly high-level command parsing, script management, remote terminal, and distributed processing tools
 '''
 
+'''
+to add:
+V1.2:
+Filer
+
+Add Html ssl
+
+Make HTTP resilient 
+
+
+V1.3:
+FangNet
+HTTP 2.0 support
+HTTP timeouts
+
+'''
 VERSION = "v1.2Beta"
 
 import socket
@@ -314,7 +330,7 @@ class _Fang_Terminal_Server_Client:
 		except Exception:
 			self.connection_open = False
 
-	def input(self, string, timeout=None):
+	def input(self, string="", timeout=None):
 		self.send(str(len(string)) + "|inp" + str(string))
 		try:
 			if timeout:
@@ -575,9 +591,9 @@ class HTTPServer: # A Class for creating basic robust HTTP response servers
 	def set_response_method(self, method): # Set the response method that will be called every time a client connects and sends a request
 		self.response_method = method
 
-	def start_http_server(self, IP, port, service_threads=1, listen=10): # Starts the HTTP Server
+	def start_http_server(self, IP, port, service_threads=1, listen=10, recv_max=8192, buffer=8192): # Starts the HTTP Server
 		self.http_ip = str(IP)
-		self.http_port = int(port)
+		self.http_port = int(port) 
 		self.http_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		self.http_sock.bind((self.http_ip, self.http_port))
 		self.http_sock.listen(int(listen))
@@ -588,7 +604,7 @@ class HTTPServer: # A Class for creating basic robust HTTP response servers
 		thread = threading.Thread(target=self._http_connection_handler)
 		thread.start()
 		for iden in range(int(service_threads)):
-			thread = threading.Thread(target=self._http_connection_servicer, args=(iden, service_threads-1))
+			thread = threading.Thread(target=self._http_connection_servicer, args=(iden, service_threads-1, recv_max, buffer))
 			thread.start()
 
 		
@@ -602,14 +618,13 @@ class HTTPServer: # A Class for creating basic robust HTTP response servers
 			self.awaiting_connections.append([client, address])
 			
 
-	def _http_connection_servicer(self, iden, max_id): # Background thread that services connections
+	def _http_connection_servicer(self, iden, max_id, max_recv, buffer): # Background thread that services connections
 		while self.http_running:
 			send = True
 			while (len(self.awaiting_connections) == 0) or (self.current_id != iden):
 				if not(self.http_running):
 					return
 			
-			print(self.awaiting_connections, self.current_id, iden)
 			
 			try:
 				current = self.awaiting_connections[0]
@@ -623,7 +638,7 @@ class HTTPServer: # A Class for creating basic robust HTTP response servers
 
 			if send:
 				try:
-					client_obj = _HTTP_client(current[1], current[0], "HTTP")
+					client_obj = _HTTP_client(current[1], current[0], "HTTP", max_recv, buffer)
 					self.response_method(client_obj)
 					current[0].sendall(client_obj._render_page())
 					current[0].close()
@@ -631,24 +646,34 @@ class HTTPServer: # A Class for creating basic robust HTTP response servers
 					pass
 
 class _HTTP_client: # The Client object that is sent to the response method that takes care of what is responded
-	def __init__(self, address, client_object, http_or_https): # Initialize the object
+	def __init__(self, address, client_object, http_or_https, max_read, buffer): # Initialize the object
 		self.client = client_object
 		self.address = address
 		self.http_state = http_or_https
 		self.tags = []
 
-		read = self.client.recv(8192)
-		temp_tags = read.decode().replace("\r\n", "\n").split("\n")[1:]
+		read = b""
+		for _ in range(round(max_read/buffer)):
+			read += self.client.recv(buffer)
+
+		temp_tags = read.decode().replace("\r\n", "\n").split("\n\n")[0].split("\n")[1:]
 		for raw_tag in temp_tags:
 			self.tags.append(raw_tag.split(": "))
 		
 		self.raw = read
 		self.request = read.decode().split("\n")[0]
+		self.http_version = None
+		if " HTTP/1.1" in read.decode():
+			self.http_version = "HTTP/1.1"
+
+		self.request_type = self.request.split(" ")[0]
 		self.split_request = read.decode().split("\r\n")[0].replace("GET ", "").replace(" HTTP/1.1", "").replace(" HTTP/2.0", "").split("/")
 		self.split_request = [i for i in self.split_request if i != ""] 
-  
+
+
 		self.override_response = None
 		self.response_tags = []
+		self.response_header = b"200 OK"
 		self.page = b''
 		
 
@@ -664,12 +689,18 @@ class _HTTP_client: # The Client object that is sent to the response method that
 	def set_response(self, byte_string): # Set the response and override all other set responses
 		self.override_response = byte_string
 
+	def set_response_header(self, byte_string):
+		self.response_header = byte_string
+
+	def get_final_response(self):
+		return self._render_page()
+
 	def _render_page(self):
 		if self.override_response:
 			return self.override_response
-		final = b"HTTP/2.0 200 OK"
+		final = b"HTTP/1.1 " + self.response_header
 		for tag in self.response_tags:
-			final += tag
-		final += b"\n\n"
+			final += tag + "\r\n"
+		final += b"\r\n\r\n"
 		final += self.page
 		return final
