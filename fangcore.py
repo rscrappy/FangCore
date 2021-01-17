@@ -108,36 +108,37 @@ class FangCore:
 		if len(parsed[0]) >= 1:
 			parsed[2] = parsed[0][0]
 			parsed[3] = string[len(parsed[0][0]):]
+			del parsed[0][0]
 
 		if whitelist:
 			blacklist = None
 
 		if self.limitlist_function:
 			if whitelist:
-				if not(parsed[0][0] in whitelist):
+				if not(parsed[2] in whitelist):
 					self.limitlist_function(parsed)
 					return parsed
 
 
 			if blacklist:
-				if parsed[0][0] in blacklist:
+				if parsed[2] in blacklist:
 					self.limitlist_function(parsed)
 					return parsed
 
 		if not(self.limitlist_function):
 			if whitelist:
-				if not(parsed[0][0] in whitelist):
+				if not(parsed[2] in whitelist):
 					return parsed
 
 
 			if blacklist:
-				if parsed[0][0] in blacklist:
+				if parsed[2] in blacklist:
 					return parsed
 
 
 		for command_binding in self.command_bindings:
 
-			if parsed[0][0] == command_binding[2]:
+			if parsed[2] == command_binding[2]:
 				if command_binding[0]:
 					try:
 						command_binding[1](parsed, command_binding[0])
