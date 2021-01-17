@@ -42,113 +42,117 @@ class FangCore:
 
 
 	def command(self, string, blacklist=None, whitelist=None):
-		ignore_state = False
-		letter = 0
 		try:
 			string = string.strip()
 			string = string.replace("\r\n", " ")
 			string = string.replace("\n", " ")
 		except Exception:
 			return
-		final = [[],[],string,string]
-		append_to_final = ""
-		while True: #Command string Parser
+		#[[commands],[options],commandword,raw rest of command]
+		parsed = [[],[],"",""]
+		letter_number = 0
+		letter = ""
+		ignore_state = False
+		last_letter_space = False
+		option_state = False
+		temp_split_parse = ""
 
-			if letter == len(string): #Detect Ingnore and ignore exceptions
-				break;
-			if string[letter] == "\\":
-				ignore_state = True
-				letter += 1
-				if letter == len(string):
-					break
-				if string[letter] == "\\":
+		while True:
+			letter = string[letter_number]
+			if letter == "\\":
+				if ignore_state:
+					temp_split_parse += "\\"
 					ignore_state = False
-					append_to_final += "\\"
+				else:
+					ignore_state = True
 
-			current_letter = string[letter] # set constant to increase speed
-
-			if current_letter == " " and not(ignore_state): #Separate command arguments by spaces
-				final[0].append(append_to_final)
-				append_to_final = ""
-
-			elif current_letter == "-" and not(ignore_state): #Detect options
-				if not(letter+1 == len(string)) and not(string[letter+1] == " "):
-					option_add = ""
-					while True:
-						if letter+1 == len(string) or string[letter]==" ":
-							break
-						
-						letter += 1
-						option_add += string[letter]
-						
-					final[1].append(option_add.strip())
+			if letter == " ":
+				if not(last_letter_space) and not(ignore_state):
+					if option_state:
+						parsed[1].append(temp_split_parse)
+					else:
+						parsed[0].append(temp_split_parse)
+					temp_split_parse = ""
+					option_state = False
+				else:
+					if ignore_state:
+						temp_split_parse += " "
+						ignore_state = False
+					if last_letter_space:
+						pass
 
 
-			else: #add letter to separation buffer
-				append_to_final += current_letter
+			if letter == "-":
+				if option_state:
+					temp_split_parse += letter
+				if not(ignore_state) and not(option_state):
+					option_state = True
+					parsed[0].append(temp_split_parse)
+					temp_split_parse = ""
+				else:
+					temp_split_parse += letter
+					ignore_state = False
 
-			ignore_state = False
-			letter += 1
-		final[0].append(append_to_final)
-		# Complete Parsing
+			if letter != " " and letter != "\\" and letter != "-":
+				temp_split_parse += letter
+				last_letter_space = False
+				
+			letter_number += 1
+			if letter_number == len(string):
+				if not(temp_split_parse.strip() == ""):
+					if option_state:
+						parsed[1].append(temp_split_parse)
+					else:
+						parsed[0].append(temp_split_parse)
+				break
+		if len(parsed[0]) >= 1:
+			parsed[2] = parsed[0][0]
+			parsed[3] = string[len(parsed[0][0]):]
 
-		#Clean up
-		if (len(final[0][1:]) == 1):
-			if final[0][1] == '':
-				del final[0][1]
-
-		if whitelist and blacklist: #Prioritize Whitelist if both are set
+		if whitelist:
 			blacklist = None
 
-		exists = False #Check if command exists
-		for command in self.command_bindings:
-			if command[2] == final[2]:
-				exists = True
-		if not(exists):
-			return final
+		if self.limitlist_function:
+			if whitelist:
+				if not(parsed[0][0] in whitelist):
+					self.limitlist_function(parsed)
+					return parsed
 
-		if blacklist: # check for command in blacklist if set
-			if final[2] in blacklist:
-				if self.limitlist_function:
+
+			if blacklist:
+				if parsed[0][0] in blacklist:
+					self.limitlist_function(parsed)
+					return parsed
+
+		if not(self.limitlist_function):
+			if whitelist:
+				if not(parsed[0][0] in whitelist):
+					return parsed
+
+
+			if blacklist:
+				if parsed[0][0] in blacklist:
+					return parsed
+
+
+		for command_binding in self.command_bindings:
+
+			if parsed[0][0] == command_binding[2]:
+				if command_binding[0]:
 					try:
-						self.limitlist_function(final)
-						return False
+						command_binding[1](parsed, command_binding[0])
 					except Exception:
-						self.limitlist_function()
-						return False
-				else:
-					return final
-
-		if whitelist: # check for command in whitelist if set
-			if not(final[2] in whitelist):
-				if self.limitlist_function:
-					try:
-						self.limitlist_function(final)
-						return False
-					except Exception:
-						self.limitlist_function()
-						return False
-				else:
-					return final
-
-
-		for command in self.command_bindings: #Begin command search
-			if command[2].strip() == final[0][0]:
-				if not(command[0]):
-					try:
-						command[1]([final[0][1:],final[1],final[2][:len(final[0][0])],final[2][len(final[0][0]):]]) # Execute without parameters
-					except TypeError:
-						command[1]()
-				else:
-					try:
-						command[1]([final[0][1:],final[1],final[2][:len(final[0][0])],final[2][len(final[0][0]):]],command[0]) # Execute with param
-					except TypeError:
 						try:
-							command[1](command[0])
-						except TypeError:
-							command[1]()
+							command_binding[1](parsed)
+						except Exception:
+							command_binding[1]()
+				else:
+					try:
+						command_binding[1](parsed)
+					except Exception:
+						command_binding[1]()
 				return False
-		return final
+		return parsed
 
 
 	def bind_command(self, command, call_function, call_function_param=None): #Bind a command to a call function, and the parameter will be fed into the function supplied
@@ -583,18 +587,31 @@ class HTTPServer: # A Class for creating basic robust HTTP response servers
 		self.http_port = None
 		self.http_sock = None
 		self.http_running = False
-		self.response_method = None
-		self.clients = []
-		self.awaiting_connections = []
+		self.http_awaiting_connections = []
 
+		self.response_method = None
+
+		self.https_ip = None
+		self.https_port = None
+		self.https_esock = None
+		self.https_sock = None
+		self.https_running = False
+		self.https_certchain = None
+		self.https_private_key = None
+		self.https_ssl_context = None
+		self.https_awaiting_connections = []
 
 	def set_response_method(self, method): # Set the response method that will be called every time a client connects and sends a request
 		self.response_method = method
 
-	def start_http_server(self, IP, port, service_threads=1, listen=10, recv_max=8192, buffer=8192): # Starts the HTTP Server
+	def start_http_server(self, IP, port, service_threads=1, listen=10, recv_max=8192, buffer=False, reuse_socket=True): # Starts the HTTP Server
+		if not buffer:
+			buffer = recv_max
 		self.http_ip = str(IP)
 		self.http_port = int(port) 
 		self.http_sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		if reuse_socket:
+			self.http_sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 		self.http_sock.bind((self.http_ip, self.http_port))
 		self.http_sock.listen(int(listen))
 
@@ -612,23 +629,56 @@ class HTTPServer: # A Class for creating basic robust HTTP response servers
 	def stop_http_server(self): # Stop the HTTP Server
 		self.http_running = False
 
-	def _http_connection_handler(self): # Background thread that takes connections
-		while self.http_running:
-			client, address = self.http_sock.accept()
-			self.awaiting_connections.append([client, address])
+	def start_https_server(self, IP, port, certchain, private_key, ciphers, service_threads=1, listen=10, recv_max=8192, buffer=False, reuse_socket=True): # Starts the HTTPS Server
+		if not buffer:
+			buffer = recv_max
+
+		
+		if certchain and private_key:
+			self.https_certchain = certchain
+			self.https_private_key = private_key
+
+		self.https_ip = str(IP)
+		self.https_port = int(port) 
+		self.https_esock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+		self.https_esock.bind((self.https_ip, self.https_port))
+		self.https_esock.listen(int(listen))
+		#"EECDH+AESGCM:EDH+AESGCM:AES256+EECDH:AES256+EDH"
+
+		self.https_sock = ssl.wrap_socket(self.https_esock, server_side=True, ciphers=ciphers, keyfile=private_key, certfile=certchain)
+
+		self.https_running = True
+		self.current_id = 0
+
+		thread = threading.Thread(target=self._https_connection_handler)
+		thread.start()
+		for iden in range(int(service_threads)):
+			thread = threading.Thread(target=self._https_connection_servicer, args=(iden, service_threads-1, recv_max, buffer))
+			thread.start()
+
+		
+
+	def stop_https_server(self): # Stop the HTTPS Server
+		self.https_running = False
+
+
+	def _https_connection_handler(self): # Background thread that takes connections
+		while self.https_running:
+			client, address = self.https_sock.accept()
+			self.https_awaiting_connections.append([client, address])
 			
 
-	def _http_connection_servicer(self, iden, max_id, max_recv, buffer): # Background thread that services connections
-		while self.http_running:
+	def _https_connection_servicer(self, iden, max_id, max_recv, buffer): # Background thread that services connections
+		while self.https_running:
 			send = True
-			while (len(self.awaiting_connections) == 0) or (self.current_id != iden):
-				if not(self.http_running):
+			while (len(self.https_awaiting_connections) == 0) or (self.current_id != iden):
+				if not(self.https_running):
 					return
 			
 			
 			try:
-				current = self.awaiting_connections[0]
-				del self.awaiting_connections[0]
+				current = self.https_awaiting_connections[0]
+				del self.https_awaiting_connections[0]
 			except Exception:
 				send = False
 
@@ -640,7 +690,41 @@ class HTTPServer: # A Class for creating basic robust HTTP response servers
 				try:
 					client_obj = _HTTP_client(current[1], current[0], "HTTP", max_recv, buffer)
 					self.response_method(client_obj)
-					current[0].sendall(client_obj._render_page())
+					current[0].send(client_obj._render_page())
+					current[0].close()
+				except Exception:
+					pass
+
+
+	def _http_connection_handler(self): # Background thread that takes connections
+		while self.http_running:
+			client, address = self.http_sock.accept()
+			self.http_awaiting_connections.append([client, address])
+			
+
+	def _http_connection_servicer(self, iden, max_id, max_recv, buffer): # Background thread that services connections
+		while self.http_running:
+			send = True
+			while (len(self.http_awaiting_connections) == 0) or (self.current_id != iden):
+				if not(self.http_running):
+					return
+			
+			
+			try:
+				current = self.http_awaiting_connections[0]
+				del self.http_awaiting_connections[0]
+			except Exception:
+				send = False
+
+			if self.current_id == max_id:
+				self.current_id = -1
+			self.current_id += 1
+
+			if send:
+				try:
+					client_obj = _HTTP_client(current[1], current[0], "HTTP", max_recv, buffer)
+					self.response_method(client_obj)
+					current[0].send(client_obj._render_page())
 					current[0].close()
 				except Exception:
 					pass
@@ -668,7 +752,11 @@ class _HTTP_client: # The Client object that is sent to the response method that
 
 		self.request_type = self.request.split(" ")[0]
 		self.split_request = read.decode().split("\r\n")[0].replace("GET ", "").replace(" HTTP/1.1", "").replace(" HTTP/2.0", "").split("/")
-		self.split_request = [i for i in self.split_request if i != ""] 
+		self.split_request = [i for i in self.split_request if i != ""]
+		if len(read.decode().split("\r\n\r\n")) > 1:
+			self.request_content = read.decode().split("\r\n\r\n")[1]
+		else:
+			self.request_content = None
 
 
 		self.override_response = None
@@ -678,7 +766,7 @@ class _HTTP_client: # The Client object that is sent to the response method that
 		
 
 	def add_tag(self, tag_name, tag_contents): # Add an HTTP tag
-		self.response_tags.append(tag_name +": " + tag_contents)
+		self.response_tags.append(tag_name + b": " + tag_contents)
 
 	def add_raw(self, byte_string): # Add a tag but specify it to be raw
 		self.response_tags.append(byte_string)
@@ -700,7 +788,7 @@ class _HTTP_client: # The Client object that is sent to the response method that
 			return self.override_response
 		final = b"HTTP/1.1 " + self.response_header
 		for tag in self.response_tags:
-			final += tag + "\r\n"
+			final += tag + b"\r\n"
 		final += b"\r\n\r\n"
 		final += self.page
 		return final
