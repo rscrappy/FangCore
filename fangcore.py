@@ -752,7 +752,16 @@ class _HTTP_client: # The Client object that is sent to the response method that
 			self.http_version = "HTTP/1.1"
 
 		self.request_type = self.request.split(" ")[0]
-		self.split_request = read.decode().split("\r\n")[0].replace("GET ", "").replace(" HTTP/1.1", "").replace(" HTTP/2.0", "").split("/")
+		self.split_request = read.decode().split("\r\n")[0].replace("GET ", "").replace(" HTTP/1.1", "").replace(" HTTP/2.0", "")
+
+		if "?" in self.split_request:
+			self.URL_tokens = self.split_request.split('?')[1]
+			self.split_request = self.split_request.split('?')[0].split("/")
+		else:
+			self.URL_tokens = False
+			self.split_request = self.split_request.split("/")
+
+
 		self.split_request = [i for i in self.split_request if i != ""]
 		if len(read.decode().split("\r\n\r\n")) > 1:
 			self.request_content = read.decode().split("\r\n\r\n")[1]
