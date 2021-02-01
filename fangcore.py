@@ -630,28 +630,28 @@ class HTTPServer: # A Class for creating basic robust HTTP response servers
 	def stop_http_server(self): # Stop the HTTP Server
 		self.http_running = False
 
-	def start_https_server(self, IP, port, certchain, private_key, ciphers, service_threads=1, listen=10, recv_max=8192, buffer=False, reuse_socket=True): # Starts the HTTPS Server
+	def start_https_server(self, IP, port, certchain, private_key, service_threads=1, listen=10, ignore_invalid_cert=False, recv_max=8192, buffer=False, reuse_socket=True): # Starts the HTTPS Server
 		if not buffer:
 			buffer = recv_max
 
+		self.ssl_context = ssl.SSLContext(ssl.PROTOCOL_TLS_SERVER)
+		self.ssl_context.load_cert_chain(certchain, private_key)
 		
-		if certchain and private_key:
-			self.https_certchain = certchain
-			self.https_private_key = private_key
 
 		self.https_ip = str(IP)
 		self.https_port = int(port) 
 		self.https_esock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 		self.https_esock.bind((self.https_ip, self.https_port))
+		if reuse_socket:
+			self.https_esock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
 		self.https_esock.listen(int(listen))
-		#"EECDH+AESGCM:EDH+AESGCM:AES256+EECDH:AES256+EDH"
 
-		self.https_sock = ssl.wrap_socket(self.https_esock, server_side=True, ciphers=ciphers, keyfile=private_key, certfile=certchain)
+		self.https_sock = self.ssl_context.wrap_socket(self.https_esock, server_side=True)
 
 		self.https_running = True
 		self.current_id = 0
 
-		thread = threading.Thread(target=self._https_connection_handler)
+		thread = threading.Thread(target=self._https_connection_handler, args=[ignore_invalid_cert])
 		thread.start()
 		for iden in range(int(service_threads)):
 			thread = threading.Thread(target=self._https_connection_servicer, args=(iden, service_threads-1, recv_max, buffer))
@@ -663,10 +663,18 @@ class HTTPServer: # A Class for creating basic robust HTTP response servers
 		self.https_running = False
 
 
-	def _https_connection_handler(self): # Background thread that takes connections
+	def _https_connection_handler(self, exception_handle=False): # Background thread that takes connections
 		while self.https_running:
-			client, address = self.https_sock.accept()
-			self.https_awaiting_connections.append([client, address])
+			allow = True
+			if exception_handle:
+				try:
+					client, address = self.https_sock.accept()
+				except ssl.SSLError:
+					allow = False
+			else:
+				client, address = self.https_sock.accept()
+			if allow:
+				self.https_awaiting_connections.append([client, address])
 			
 
 	def _https_connection_servicer(self, iden, max_id, max_recv, buffer): # Background thread that services connections
