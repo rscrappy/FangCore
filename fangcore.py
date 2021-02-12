@@ -9,7 +9,7 @@ to add:
 V1.2:
 Filer
 
-Add Html ssl
+FangCoreBase runs command multiple times on failure inside of function, except only argument errors.
 
 Make HTTP resilient 
 
