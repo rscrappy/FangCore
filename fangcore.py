@@ -10,7 +10,7 @@ V1.2:
 Filer
 
 FangCoreBase runs command multiple times on failure inside of function, except only argument errors.
-
+Options in a command such as -a-a will be converted into a--a
 Make HTTP resilient 
 
 
