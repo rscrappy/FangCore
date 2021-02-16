@@ -11,7 +11,8 @@ Filer
 
 FangCoreBase runs command multiple times on failure inside of function, except only argument errors.
 Options in a command such as -a-a will be converted into a--a
-Make HTTP resilient 
+Make HTTP resilient
+request file is broken for FCT
 
 
 V1.3:
