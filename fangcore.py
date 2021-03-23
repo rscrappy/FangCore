@@ -13,6 +13,8 @@ FangCoreBase runs command multiple times on failure inside of function, except o
 Options in a command such as -a-a will be converted into a--a
 Make HTTP resilient
 request file is broken for FCT
+HTTP only supports Get
+Tags are not on a newline from the response header
 
 
 V1.3:
