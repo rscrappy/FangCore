@@ -809,7 +809,7 @@ class _HTTP_client: # The Client object that is sent to the response method that
 			return self.override_response
 		final = b"HTTP/1.1 " + self.response_header
 		for tag in self.response_tags:
-			final += tag + b"\r\n"
+			final += b"\r\n" + tag
 		final += b"\r\n\r\n"
 		final += self.page
 		return final
