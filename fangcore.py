@@ -1,5 +1,5 @@
 '''
-November 2020 - FangCore - Jacob Scrapchansky
+March 2021 - FangCore - Jacob Scrapchansky
 FangCore is a python library built for creating highly customizable Operating systems.
 It has incredibly high-level command parsing, script management, remote terminal, and distributed processing tools
 '''
