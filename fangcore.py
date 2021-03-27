@@ -24,6 +24,7 @@ HTTP timeouts
 
 '''
 VERSION = "v1.2Beta"
+BUILD = 1000
 
 import socket
 import threading
@@ -740,7 +741,7 @@ class HTTPServer: # A Class for creating basic robust HTTP response servers
 					current[0].close()
 				except Exception:
 					pass
-
+					
 class _HTTP_client: # The Client object that is sent to the response method that takes care of what is responded
 	def __init__(self, address, client_object, http_or_https, max_read, buffer): # Initialize the object
 		self.client = client_object
@@ -762,15 +763,26 @@ class _HTTP_client: # The Client object that is sent to the response method that
 		if " HTTP/1.1" in read.decode():
 			self.http_version = "HTTP/1.1"
 
-		self.request_type = self.request.split(" ")[0]
-		self.split_request = read.decode().split("\r\n")[0].replace("GET ", "").replace(" HTTP/1.1", "").replace(" HTTP/2.0", "")
 
+		self.request_type = self.request.split(" ")[0].strip()
+		self.split_request = read.decode()[read.decode().index(" "):].replace("\r\n", "\n").split("\n")[0]\
+		.replace(" HTTP/1.1", "")\
+		.replace(" HTTP/2.0", "")
 		if "?" in self.split_request:
 			self.URL_tokens = self.split_request.split('?')[1]
-			self.split_request = self.split_request.split('?')[0].split("/")
+			self.split_request = self.split_request.split('?')[0].split("/")[1:]
 		else:
 			self.URL_tokens = False
-			self.split_request = self.split_request.split("/")
+			self.split_request = self.split_request.split("/")[1:]
+
+		for request_num in range(len(self.split_request)):
+			replaces = []
+			for char in [i for i, letter in enumerate(self.split_request[request_num]) if letter == "%"]:
+				replaces.append([self.split_request[request_num][char:char+3], chr(int(self.split_request[request_num][char+1:char+3], 16))])
+			for replace in replaces:
+				self.split_request[request_num] = self.split_request[request_num].replace(replace[0], replace[1])
+
+		
 
 
 		self.split_request = [i for i in self.split_request if i != ""]
@@ -779,6 +791,8 @@ class _HTTP_client: # The Client object that is sent to the response method that
 		else:
 			self.request_content = None
 
+
+		
 
 		self.override_response = None
 		self.response_tags = []
